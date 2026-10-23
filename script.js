@@ -53,19 +53,64 @@
     '.service-card, .steps li, .contact-card, .section-head, .area-cta, .form-card, .quote-copy, .process-intro, .chips'
   );
   if ('IntersectionObserver' in window && revealTargets.length) {
+    var pending = [];
+
+    var show = function (el) {
+      if (el.classList.contains('visible')) return;
+      el.classList.add('visible');
+      io.unobserve(el);
+    };
+
     var io = new IntersectionObserver(function (entries) {
       entries.forEach(function (entry) {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('visible');
-          io.unobserve(entry.target);
-        }
+        if (entry.isIntersecting) show(entry.target);
       });
-    }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+    }, { threshold: 0, rootMargin: '0px 0px -40px 0px' });
 
     Array.prototype.forEach.call(revealTargets, function (el, i) {
       el.classList.add('reveal');
       el.style.transitionDelay = (Math.min(i % 4, 3) * 70) + 'ms';
+      pending.push(el);
       io.observe(el);
+    });
+
+    /* Safety sweep: reveal anything that has entered or already scrolled past
+       the viewport. IntersectionObserver samples asynchronously and can miss
+       elements during fast or programmatic scrolling, which would otherwise
+       leave a whole section stuck at opacity 0. */
+    var ticking = false;
+    var sweep = function () {
+      ticking = false;
+      var h = window.innerHeight || document.documentElement.clientHeight;
+      pending = pending.filter(function (el) {
+        if (el.classList.contains('visible')) return false;
+        if (el.getBoundingClientRect().top < h) { show(el); return false; }
+        return true;
+      });
+      if (!pending.length) {
+        window.removeEventListener('scroll', onSweep);
+        window.removeEventListener('resize', onSweep);
+      }
+    };
+    var onSweep = function () {
+      if (ticking) return;
+      ticking = true;
+      window.requestAnimationFrame(sweep);
+    };
+
+    window.addEventListener('scroll', onSweep, { passive: true });
+    window.addEventListener('resize', onSweep);
+    onSweep();
+
+    /* Last-resort fallback: never leave content permanently invisible. */
+    window.addEventListener('load', function () {
+      setTimeout(function () {
+        Array.prototype.forEach.call(revealTargets, show);
+      }, 2500);
+    });
+  } else {
+    Array.prototype.forEach.call(revealTargets, function (el) {
+      el.classList.add('visible');
     });
   }
 
